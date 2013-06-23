@@ -124,6 +124,7 @@ public class AudioPlayer implements Synth, AudioGenerator {
     //private float speed;
     private int length;
     private short[] audioData;
+    private short[][] audioClipArray;
     private float startPos;
     private float readHead;
     private float dReadHead;
@@ -144,98 +145,21 @@ public class AudioPlayer implements Synth, AudioGenerator {
 	fxChain = new FXChain(sampleRate);
 	this.sampleRate = sampleRate;
     }
-/*
-    public AudioPlayer (String filename, float sampleRate, PApplet processing) {
-	//super(filename);
-	this(sampleRate);
-	try {
-	    // how long is the file in bytes?
-	    //long byteCount = getAssets().openFd(filename).getLength();
-	    File f = new File(processing.dataPath(filename));
-	    long byteCount = f.length();
-	    //System.out.println("bytes in "+filename+" "+byteCount);
 
-	    // check the format of the audio file first!
-	    // only accept mono 16 bit wavs
-	    //InputStream is = getAssets().open(filename); 
-	    BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f));
+public void selectAudioClip(int index){
+  audioData = audioClipArray[index];
+}
+public void loadAudioClips(String[] filenames, PApplet processing){
+    audioClipArray = new short [filenames.length][];
+     for(int i = 0; i< filenames.length;i++){
+       audioClipArray[i] = justLoadAudioFile(filenames[i],   processing);
+     }
+}    
 
-	    // chop!!
-
-	    int bitDepth;
-	    int channels;
-	    boolean isPCM;
-	    // allows us to read up to 4 bytes at a time 
-	    byte[] byteBuff = new byte[4];
-
-	    // skip 20 bytes to get file format
-	    // (1 byte)
-	    bis.skip(20);
-	    bis.read(byteBuff, 0, 2); // read 2 so we are at 22 now
-	    isPCM = ((short)byteBuff[0]) == 1 ? true:false; 
-	    //System.out.println("File isPCM "+isPCM);
-
-	    // skip 22 bytes to get # channels
-	    // (1 byte)
-	    bis.read(byteBuff, 0, 2);// read 2 so we are at 24 now
-	    channels = (short)byteBuff[0];
-	    //System.out.println("#channels "+channels+" "+byteBuff[0]);
-	    // skip 24 bytes to get sampleRate
-	    // (32 bit int)
-	    bis.read(byteBuff, 0, 4); // read 4 so now we are at 28
-	    sampleRate = bytesToInt(byteBuff, 4);
-	    //System.out.println("Sample rate "+sampleRate);
-	    // skip 34 bytes to get bits per sample
-	    // (1 byte)
-	    bis.skip(6); // we were at 28...
-	    bis.read(byteBuff, 0, 2);// read 2 so we are at 36 now
-	    bitDepth = (short)byteBuff[0];
-	    //System.out.println("bit depth "+bitDepth);
-	    // convert to word count...
-	    bitDepth /= 8;
-	    // now start processing the raw data
-	    // data starts at byte 36
-	    int sampleCount = (int) ((byteCount - 36) / (bitDepth * channels));
-	    audioData = new short[sampleCount];
-	    int skip = (channels -1) * bitDepth;
-	    int sample = 0;
-	    // skip a few sample as it sounds like shit
-	    bis.skip(bitDepth * 4);
-	    while (bis.available () >= (bitDepth+skip)) {
-		bis.read(byteBuff, 0, bitDepth);// read 2 so we are at 36 now
-		//int val = bytesToInt(byteBuff, bitDepth);
-		// resample to 16 bit by casting to a short
-		audioData[sample] = (short) bytesToInt(byteBuff, bitDepth);
-		bis.skip(skip);
-		sample ++;
-	    }
-
-	    float secs = (float)sample / (float)sampleRate;
-	    //System.out.println("Read "+sample+" samples expected "+sampleCount+" time "+secs+" secs ");      
-	    bis.close();
-
-
-	    // unchop
-	    readHead = 0;
-	    startPos = 0;
-	    // default to 1 sample shift per tick
-	    dReadHead = 1;
-	    isPlaying = false;
-	    isLooping = true;
-	    masterVolume = 4;
-	} 
-	catch (FileNotFoundException e) {
-
-	    e.printStackTrace();
-	}
-	catch (IOException e) {
-	    e.printStackTrace();
-	}
-    }
- */   
 public short[] justLoadAudioFile(String filename,  PApplet processing)
 {
    short [] myAudioData = null;
+   int fileSampleRate = 0;
    try {
       // how long is the file in bytes?
 
@@ -272,10 +196,8 @@ public short[] justLoadAudioFile(String filename,  PApplet processing)
       // skip 24 bytes to get sampleRate
       // (32 bit int)
       bis.read(byteBuff, 0, 4); // read 4 so now we are at 28
-      int fileSampleRate = bytesToInt(byteBuff, 4);
-      if((float) fileSampleRate != this.sampleRate){
-         throw new InputMismatchException("In File: "+filename+" The sample rate of: "+fileSampleRate+ " does not match the default sample rate of: "+this.sampleRate);
-      }  
+      fileSampleRate = bytesToInt(byteBuff, 4);
+       
       //System.out.println("Sample rate "+sampleRate);
       // skip 34 bytes to get bits per sample
       // (1 byte)
@@ -314,7 +236,15 @@ public short[] justLoadAudioFile(String filename,  PApplet processing)
   catch (IOException e) {
       e.printStackTrace();
   } 
+  if((float) fileSampleRate != this.sampleRate){
+         //throw new InputMismatchException("In File: "+filename+" The sample rate of: "+fileSampleRate+ " does not match the default sample rate of: "+this.sampleRate);
+      Resampler resampler = new Resampler();
+      System.out.println("Resampling file" +filename+" from "+fileSampleRate+" Hz to "+this.sampleRate+ " Hz"); 
+  return resampler.reSample(myAudioData,  (int)fileSampleRate,(int) (this.sampleRate)); 
+    } 
   return myAudioData;
+  
+  
 }  
 
 
@@ -1291,6 +1221,1009 @@ public class FFT {
 	    mmax = istep;
 	}
     }
+}
+/*
+ * Copyright (C) 2011 Jacquet Wong
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Window functions generator
+ *
+ * @author Jacquet Wong
+ *
+ */
+public class WindowFunction {
+
+        public  final int RECTANGULAR = 0;
+        public  final int BARTLETT = 1;
+        public  final int HANNING = 2;
+        public  final int HAMMING = 3;
+        public  final int BLACKMAN = 4;
+
+        int windowType = 0; // defaults to rectangular window
+
+        public WindowFunction() {
+        }
+
+        public void setWindowType(int wt) {
+                windowType = wt;
+        }
+
+        public void setWindowType(String w) {
+                if (w.toUpperCase().equals("RECTANGULAR"))
+                        windowType = RECTANGULAR;
+                if (w.toUpperCase().equals("BARTLETT"))
+                        windowType = BARTLETT;
+                if (w.toUpperCase().equals("HANNING"))
+                        windowType = HANNING;
+                if (w.toUpperCase().equals("HAMMING"))
+                        windowType = HAMMING;
+                if (w.toUpperCase().equals("BLACKMAN"))
+                        windowType = BLACKMAN;
+        }
+
+        public int getWindowType() {
+                return windowType;
+        }
+
+        /**
+         * Generate a window
+         *
+         * @param nSamples      size of the window
+         * @return      window in array
+         */
+        public double[] generate(int nSamples) {
+                // generate nSamples window function values
+                // for index values 0 .. nSamples - 1
+                int m = nSamples / 2;
+                double r;
+                double pi = Math.PI;
+                double[] w = new double[nSamples];
+                switch (windowType) {
+                case BARTLETT: // Bartlett (triangular) window
+                        for (int n = 0; n < nSamples; n++)
+                                w[n] = 1.0f - Math.abs(n - m) / m;
+                        break;
+                case HANNING: // Hanning window
+                        r = pi / (m + 1);
+                        for (int n = -m; n < m; n++)
+                                w[m + n] = 0.5f + 0.5f * Math.cos(n * r);
+                        break;
+                case HAMMING: // Hamming window
+                        r = pi / m;
+                        for (int n = -m; n < m; n++)
+                                w[m + n] = 0.54f + 0.46f * Math.cos(n * r);
+                        break;
+                case BLACKMAN: // Blackman window
+                        r = pi / m;
+                        for (int n = -m; n < m; n++)
+                                w[m + n] = 0.42f + 0.5f * Math.cos(n * r) + 0.08f
+                                                * Math.cos(2 * n * r);
+                        break;
+                default: // Rectangular window function
+                        for (int n = 0; n < nSamples; n++)
+                                w[n] = 1.0f;
+                }
+                return w;
+        }
+}
+
+
+/**
+ * Resample signal data (base on bytes)
+ *
+ * @author jacquet
+ *
+ */
+public class Resampler {
+
+        public Resampler() {
+        }
+
+        /**
+         * Do resampling. Currently the amplitude is stored by short such that maximum bitsPerSample is 16 (bytePerSample is 2)
+         *
+         * @param sourceData    The source data in bytes
+         * @param bitsPerSample How many bits represents one sample (currently supports max. bitsPerSample=16)
+         * @param sourceRate    Sample rate of the source data
+         * @param targetRate    Sample rate of the target data
+         * @return re-sampled data
+         */
+        //public byte[] reSample(byte[] sourceData, int bitsPerSample, int sourceRate, int targetRate) 
+        public short[] reSample(short[] sourceData,  int sourceRate, int targetRate) 
+        {
+
+                // make the bytes to amplitudes first
+                /*int bytePerSample = bitsPerSample / 8;
+                int numSamples = sourceData.length / bytePerSample;
+                short[] amplitudes = new short[numSamples];     // 16 bit, use a short to store
+               
+                int pointer = 0;
+                for (int i = 0; i < numSamples; i++) {
+                        short amplitude = 0;
+                        for (int byteNumber = 0; byteNumber < bytePerSample; byteNumber++) {
+                                // little endian
+                                amplitude |= (short) ((sourceData[pointer++] & 0xFF) << (byteNumber * 8));
+                        }
+                        amplitudes[i] = amplitude;
+                }*/
+                // end make the amplitudes
+               
+                // do interpolation
+                LinearInterpolation reSample=new LinearInterpolation();
+                short[] targetSample = reSample.interpolate(sourceRate, targetRate, sourceData);
+                int targetLength = targetSample.length;
+                // end do interpolation
+               
+                // TODO: Remove the high frequency signals with a digital filter, leaving a signal containing only half-sample-rated frequency information, but still sampled at a rate of target sample rate. Usually FIR is used
+               
+                // end resample the amplitudes
+
+                // convert the amplitude to bytes
+               /* short[] output;
+                if (bytePerSample==1){
+                        output= new byte[targetLength];
+                        for (int i=0; i<targetLength; i++){
+                                bytes[i]=(byte)targetSample[i];
+                        }
+                }
+                else{
+                        // suppose bytePerSample==2
+                        bytes= new byte[targetLength*2];
+                        for (int i=0; i<targetSample.length; i++){                              
+                                // little endian                        
+                                bytes[i*2] = (byte)(targetSample[i] & 0xff);
+                                bytes[i*2+1] = (byte)((targetSample[i] >> 8) & 0xff);                  
+                        }
+                }*/
+                // end convert the amplitude to bytes
+               
+                return targetSample;
+        }
+}
+
+
+/**
+ * Construct new data points within the range of a discrete set of known data points by linear equation
+ *
+ * @author Jacquet Wong
+ */
+public class LinearInterpolation {
+
+        public LinearInterpolation(){
+               
+        }
+       
+        /**
+         * Do interpolation on the samples according to the original and destinated sample rates
+         *
+         * @param oldSampleRate sample rate of the original samples
+         * @param newSampleRate sample rate of the interpolated samples
+         * @param samples       original samples
+         * @return interpolated samples
+         */
+        public short[] interpolate(int oldSampleRate, int newSampleRate, short[] samples) {
+
+                if (oldSampleRate==newSampleRate){
+                        return samples;
+                }
+               
+                int newLength=(int)Math.round(((float)samples.length/oldSampleRate*newSampleRate));
+                float lengthMultiplier=(float)newLength/samples.length;
+        short[] interpolatedSamples = new short[newLength];
+
+        // interpolate the value by the linear equation y=mx+c        
+        for (int i = 0; i < newLength; i++){
+           
+                // get the nearest positions for the interpolated point
+                float currentPosition = i / lengthMultiplier;
+            int nearestLeftPosition = (int)currentPosition;
+            int nearestRightPosition = nearestLeftPosition + 1;
+            if (nearestRightPosition>=samples.length){
+                nearestRightPosition=samples.length-1;
+            }
+           
+            float slope=samples[nearestRightPosition]-samples[nearestLeftPosition];     // delta x is 1
+            float positionFromLeft = currentPosition - nearestLeftPosition;
+           
+            interpolatedSamples[i] = (short)(slope*positionFromLeft+samples[nearestLeftPosition]);      // y=mx+c
+        }
+       
+        return interpolatedSamples;
+        }
+}
+
+/*
+ * Copyright (C) 2011 Jacquet Wong
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+//import com.sun.media.sound.FFT;
+
+/**
+ * FFT object, transform amplitudes to frequency intensities
+ *
+ * @author Jacquet Wong
+ *
+ */
+
+
+public final class resampleFFT {
+
+    private double[] w;
+    private int fftFrameSize;
+    private int sign;
+    private int[] bitm_array;
+    private int fftFrameSize2;
+
+    // Sign = -1 is FFT, 1 is IFFT (inverse FFT)
+    // Data = Interlaced double array to be transformed.
+    // The order is: real (sin), complex (cos)
+    // Framesize must be power of 2
+    public resampleFFT(int fftFrameSize, int sign) {
+        w = computeTwiddleFactors(fftFrameSize, sign);
+
+        this.fftFrameSize = fftFrameSize;
+        this.sign = sign;
+        fftFrameSize2 = fftFrameSize << 1;
+
+        // Pre-process Bit-Reversal
+        bitm_array = new int[fftFrameSize2];
+        for (int i = 2; i < fftFrameSize2; i += 2) {
+            int j;
+            int bitm;
+            for (bitm = 2, j = 0; bitm < fftFrameSize2; bitm <<= 1) {
+                if ((i & bitm) != 0)
+                    j++;
+                j <<= 1;
+            }
+            bitm_array[i] = j;
+        }
+
+    }
+
+    public void transform(double[] data) {
+        bitreversal(data);
+        calc(fftFrameSize, data, sign, w);
+    }
+
+    private final  double[] computeTwiddleFactors(int fftFrameSize, //static
+            int sign) {
+
+        int imax = (int) (Math.log(fftFrameSize) / Math.log(2.));
+
+        double[] warray = new double[(fftFrameSize - 1) * 4];
+        int w_index = 0;
+
+        for (int i = 0,  nstep = 2; i < imax; i++) {
+            int jmax = nstep;
+            nstep <<= 1;
+
+            double wr = 1.0;
+            double wi = 0.0;
+
+            double arg = Math.PI / (jmax >> 1);
+            double wfr = Math.cos(arg);
+            double wfi = sign * Math.sin(arg);
+
+            for (int j = 0; j < jmax; j += 2) {
+                warray[w_index++] = wr;
+                warray[w_index++] = wi;
+
+                double tempr = wr;
+                wr = tempr * wfr - wi * wfi;
+                wi = tempr * wfi + wi * wfr;
+            }
+        }
+
+        // PRECOMPUTATION of wwr1, wwi1 for factor 4 Decomposition (3 * complex
+        // operators and 8 +/- complex operators)
+        {
+            w_index = 0;
+            int w_index2 = warray.length >> 1;
+            for (int i = 0,  nstep = 2; i < (imax - 1); i++) {
+                int jmax = nstep;
+                nstep *= 2;
+
+                int ii = w_index + jmax;
+                for (int j = 0; j < jmax; j += 2) {
+                    double wr = warray[w_index++];
+                    double wi = warray[w_index++];
+                    double wr1 = warray[ii++];
+                    double wi1 = warray[ii++];
+                    warray[w_index2++] = wr * wr1 - wi * wi1;
+                    warray[w_index2++] = wr * wi1 + wi * wr1;
+                }
+            }
+
+        }
+
+        return warray;
+    }
+
+    private final  void calc(int fftFrameSize, double[] data, int sign, //stat
+            double[] w) {
+
+        final int fftFrameSize2 = fftFrameSize << 1;
+
+        int nstep = 2;
+
+        if (nstep >= fftFrameSize2)
+            return;
+        int i = nstep - 2;
+        if (sign == -1)
+            calcF4F(fftFrameSize, data, i, nstep, w);
+        else
+            calcF4I(fftFrameSize, data, i, nstep, w);
+
+    }
+
+    private final  void calcF2E(int fftFrameSize, double[] data, int i, //st
+            int nstep, double[] w) {
+        int jmax = nstep;
+        for (int n = 0; n < jmax; n += 2) {
+            double wr = w[i++];
+            double wi = w[i++];
+            int m = n + jmax;
+            double datam_r = data[m];
+            double datam_i = data[m + 1];
+            double datan_r = data[n];
+            double datan_i = data[n + 1];
+            double tempr = datam_r * wr - datam_i * wi;
+            double tempi = datam_r * wi + datam_i * wr;
+            data[m] = datan_r - tempr;
+            data[m + 1] = datan_i - tempi;
+            data[n] = datan_r + tempr;
+            data[n + 1] = datan_i + tempi;
+        }
+        return;
+
+    }
+
+    // Perform Factor-4 Decomposition with 3 * complex operators and 8 +/-
+    // complex operators
+    private final  void calcF4F(int fftFrameSize, double[] data, int i, //st
+            int nstep, double[] w) {
+        final int fftFrameSize2 = fftFrameSize << 1; // 2*fftFrameSize;
+        // Factor-4 Decomposition
+
+        int w_len = w.length >> 1;
+        while (nstep < fftFrameSize2) {
+
+            if (nstep << 2 == fftFrameSize2) {
+                // Goto Factor-4 Final Decomposition
+                // calcF4E(data, i, nstep, -1, w);
+                calcF4FE(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            int jmax = nstep;
+            int nnstep = nstep << 1;
+            if (nnstep == fftFrameSize2) {
+                // Factor-4 Decomposition not possible
+                calcF2E(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            nstep <<= 2;
+            int ii = i + jmax;
+            int iii = i + w_len;
+
+            {
+                i += 2;
+                ii += 2;
+                iii += 2;
+
+                for (int n = 0; n < fftFrameSize2; n += nstep) {
+                    int m = n + jmax;
+
+                    double datam1_r = data[m];
+                    double datam1_i = data[m + 1];
+                    double datan1_r = data[n];
+                    double datan1_i = data[n + 1];
+
+                    n += nnstep;
+                    m += nnstep;
+                    double datam2_r = data[m];
+                    double datam2_i = data[m + 1];
+                    double datan2_r = data[n];
+                    double datan2_i = data[n + 1];
+
+                    double tempr = datam1_r;
+                    double tempi = datam1_i;
+
+                    datam1_r = datan1_r - tempr;
+                    datam1_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    double n2w1r = datan2_r;
+                    double n2w1i = datan2_i;
+                    double m2ww1r = datam2_r;
+                    double m2ww1i = datam2_i;
+
+                    tempr = m2ww1r - n2w1r;
+                    tempi = m2ww1i - n2w1i;
+
+                    datam2_r = datam1_r + tempi;
+                    datam2_i = datam1_i - tempr;
+                    datam1_r = datam1_r - tempi;
+                    datam1_i = datam1_i + tempr;
+
+                    tempr = n2w1r + m2ww1r;
+                    tempi = n2w1i + m2ww1i;
+
+                    datan2_r = datan1_r - tempr;
+                    datan2_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    data[m] = datam2_r;
+                    data[m + 1] = datam2_i;
+                    data[n] = datan2_r;
+                    data[n + 1] = datan2_i;
+
+                    n -= nnstep;
+                    m -= nnstep;
+                    data[m] = datam1_r;
+                    data[m + 1] = datam1_i;
+                    data[n] = datan1_r;
+                    data[n + 1] = datan1_i;
+
+                }
+            }
+
+            for (int j = 2; j < jmax; j += 2) {
+                double wr = w[i++];
+                double wi = w[i++];
+                double wr1 = w[ii++];
+                double wi1 = w[ii++];
+                double wwr1 = w[iii++];
+                double wwi1 = w[iii++];
+                // double wwr1 = wr * wr1 - wi * wi1; // these numbers can be
+                // precomputed!!!
+                // double wwi1 = wr * wi1 + wi * wr1;
+
+                for (int n = j; n < fftFrameSize2; n += nstep) {
+                    int m = n + jmax;
+
+                    double datam1_r = data[m];
+                    double datam1_i = data[m + 1];
+                    double datan1_r = data[n];
+                    double datan1_i = data[n + 1];
+
+                    n += nnstep;
+                    m += nnstep;
+                    double datam2_r = data[m];
+                    double datam2_i = data[m + 1];
+                    double datan2_r = data[n];
+                    double datan2_i = data[n + 1];
+
+                    double tempr = datam1_r * wr - datam1_i * wi;
+                    double tempi = datam1_r * wi + datam1_i * wr;
+
+                    datam1_r = datan1_r - tempr;
+                    datam1_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    double n2w1r = datan2_r * wr1 - datan2_i * wi1;
+                    double n2w1i = datan2_r * wi1 + datan2_i * wr1;
+                    double m2ww1r = datam2_r * wwr1 - datam2_i * wwi1;
+                    double m2ww1i = datam2_r * wwi1 + datam2_i * wwr1;
+
+                    tempr = m2ww1r - n2w1r;
+                    tempi = m2ww1i - n2w1i;
+
+                    datam2_r = datam1_r + tempi;
+                    datam2_i = datam1_i - tempr;
+                    datam1_r = datam1_r - tempi;
+                    datam1_i = datam1_i + tempr;
+
+                    tempr = n2w1r + m2ww1r;
+                    tempi = n2w1i + m2ww1i;
+
+                    datan2_r = datan1_r - tempr;
+                    datan2_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    data[m] = datam2_r;
+                    data[m + 1] = datam2_i;
+                    data[n] = datan2_r;
+                    data[n + 1] = datan2_i;
+
+                    n -= nnstep;
+                    m -= nnstep;
+                    data[m] = datam1_r;
+                    data[m + 1] = datam1_i;
+                    data[n] = datan1_r;
+                    data[n + 1] = datan1_i;
+                }
+            }
+
+            i += jmax << 1;
+
+        }
+
+        calcF2E(fftFrameSize, data, i, nstep, w);
+
+    }
+
+    // Perform Factor-4 Decomposition with 3 * complex operators and 8 +/-
+    // complex operators
+    private final  void calcF4I(int fftFrameSize, double[] data, int i, //st
+            int nstep, double[] w) {
+        final int fftFrameSize2 = fftFrameSize << 1; // 2*fftFrameSize;
+        // Factor-4 Decomposition
+
+        int w_len = w.length >> 1;
+        while (nstep < fftFrameSize2) {
+
+            if (nstep << 2 == fftFrameSize2) {
+                // Goto Factor-4 Final Decomposition
+                // calcF4E(data, i, nstep, 1, w);
+                calcF4IE(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            int jmax = nstep;
+            int nnstep = nstep << 1;
+            if (nnstep == fftFrameSize2) {
+                // Factor-4 Decomposition not possible
+                calcF2E(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            nstep <<= 2;
+            int ii = i + jmax;
+            int iii = i + w_len;
+            {
+                i += 2;
+                ii += 2;
+                iii += 2;
+
+                for (int n = 0; n < fftFrameSize2; n += nstep) {
+                    int m = n + jmax;
+
+                    double datam1_r = data[m];
+                    double datam1_i = data[m + 1];
+                    double datan1_r = data[n];
+                    double datan1_i = data[n + 1];
+
+                    n += nnstep;
+                    m += nnstep;
+                    double datam2_r = data[m];
+                    double datam2_i = data[m + 1];
+                    double datan2_r = data[n];
+                    double datan2_i = data[n + 1];
+
+                    double tempr = datam1_r;
+                    double tempi = datam1_i;
+
+                    datam1_r = datan1_r - tempr;
+                    datam1_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    double n2w1r = datan2_r;
+                    double n2w1i = datan2_i;
+                    double m2ww1r = datam2_r;
+                    double m2ww1i = datam2_i;
+
+                    tempr = n2w1r - m2ww1r;
+                    tempi = n2w1i - m2ww1i;
+
+                    datam2_r = datam1_r + tempi;
+                    datam2_i = datam1_i - tempr;
+                    datam1_r = datam1_r - tempi;
+                    datam1_i = datam1_i + tempr;
+
+                    tempr = n2w1r + m2ww1r;
+                    tempi = n2w1i + m2ww1i;
+
+                    datan2_r = datan1_r - tempr;
+                    datan2_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    data[m] = datam2_r;
+                    data[m + 1] = datam2_i;
+                    data[n] = datan2_r;
+                    data[n + 1] = datan2_i;
+
+                    n -= nnstep;
+                    m -= nnstep;
+                    data[m] = datam1_r;
+                    data[m + 1] = datam1_i;
+                    data[n] = datan1_r;
+                    data[n + 1] = datan1_i;
+
+                }
+
+            }
+            for (int j = 2; j < jmax; j += 2) {
+                double wr = w[i++];
+                double wi = w[i++];
+                double wr1 = w[ii++];
+                double wi1 = w[ii++];
+                double wwr1 = w[iii++];
+                double wwi1 = w[iii++];
+                // double wwr1 = wr * wr1 - wi * wi1; // these numbers can be
+                // precomputed!!!
+                // double wwi1 = wr * wi1 + wi * wr1;
+
+                for (int n = j; n < fftFrameSize2; n += nstep) {
+                    int m = n + jmax;
+
+                    double datam1_r = data[m];
+                    double datam1_i = data[m + 1];
+                    double datan1_r = data[n];
+                    double datan1_i = data[n + 1];
+
+                    n += nnstep;
+                    m += nnstep;
+                    double datam2_r = data[m];
+                    double datam2_i = data[m + 1];
+                    double datan2_r = data[n];
+                    double datan2_i = data[n + 1];
+
+                    double tempr = datam1_r * wr - datam1_i * wi;
+                    double tempi = datam1_r * wi + datam1_i * wr;
+
+                    datam1_r = datan1_r - tempr;
+                    datam1_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    double n2w1r = datan2_r * wr1 - datan2_i * wi1;
+                    double n2w1i = datan2_r * wi1 + datan2_i * wr1;
+                    double m2ww1r = datam2_r * wwr1 - datam2_i * wwi1;
+                    double m2ww1i = datam2_r * wwi1 + datam2_i * wwr1;
+
+                    tempr = n2w1r - m2ww1r;
+                    tempi = n2w1i - m2ww1i;
+
+                    datam2_r = datam1_r + tempi;
+                    datam2_i = datam1_i - tempr;
+                    datam1_r = datam1_r - tempi;
+                    datam1_i = datam1_i + tempr;
+
+                    tempr = n2w1r + m2ww1r;
+                    tempi = n2w1i + m2ww1i;
+
+                    datan2_r = datan1_r - tempr;
+                    datan2_i = datan1_i - tempi;
+                    datan1_r = datan1_r + tempr;
+                    datan1_i = datan1_i + tempi;
+
+                    data[m] = datam2_r;
+                    data[m + 1] = datam2_i;
+                    data[n] = datan2_r;
+                    data[n + 1] = datan2_i;
+
+                    n -= nnstep;
+                    m -= nnstep;
+                    data[m] = datam1_r;
+                    data[m + 1] = datam1_i;
+                    data[n] = datan1_r;
+                    data[n + 1] = datan1_i;
+
+                }
+            }
+
+            i += jmax << 1;
+
+        }
+
+        calcF2E(fftFrameSize, data, i, nstep, w);
+
+    }
+
+    // Perform Factor-4 Decomposition with 3 * complex operators and 8 +/-
+    // complex operators
+    private final  void calcF4FE(int fftFrameSize, double[] data, int i, //st
+            int nstep, double[] w) {
+        final int fftFrameSize2 = fftFrameSize << 1; // 2*fftFrameSize;
+        // Factor-4 Decomposition
+
+        int w_len = w.length >> 1;
+        while (nstep < fftFrameSize2) {
+
+            int jmax = nstep;
+            int nnstep = nstep << 1;
+            if (nnstep == fftFrameSize2) {
+                // Factor-4 Decomposition not possible
+                calcF2E(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            nstep <<= 2;
+            int ii = i + jmax;
+            int iii = i + w_len;
+            for (int n = 0; n < jmax; n += 2) {
+                double wr = w[i++];
+                double wi = w[i++];
+                double wr1 = w[ii++];
+                double wi1 = w[ii++];
+                double wwr1 = w[iii++];
+                double wwi1 = w[iii++];
+                // double wwr1 = wr * wr1 - wi * wi1; // these numbers can be
+                // precomputed!!!
+                // double wwi1 = wr * wi1 + wi * wr1;
+
+                int m = n + jmax;
+
+                double datam1_r = data[m];
+                double datam1_i = data[m + 1];
+                double datan1_r = data[n];
+                double datan1_i = data[n + 1];
+
+                n += nnstep;
+                m += nnstep;
+                double datam2_r = data[m];
+                double datam2_i = data[m + 1];
+                double datan2_r = data[n];
+                double datan2_i = data[n + 1];
+
+                double tempr = datam1_r * wr - datam1_i * wi;
+                double tempi = datam1_r * wi + datam1_i * wr;
+
+                datam1_r = datan1_r - tempr;
+                datam1_i = datan1_i - tempi;
+                datan1_r = datan1_r + tempr;
+                datan1_i = datan1_i + tempi;
+
+                double n2w1r = datan2_r * wr1 - datan2_i * wi1;
+                double n2w1i = datan2_r * wi1 + datan2_i * wr1;
+                double m2ww1r = datam2_r * wwr1 - datam2_i * wwi1;
+                double m2ww1i = datam2_r * wwi1 + datam2_i * wwr1;
+
+                tempr = m2ww1r - n2w1r;
+                tempi = m2ww1i - n2w1i;
+
+                datam2_r = datam1_r + tempi;
+                datam2_i = datam1_i - tempr;
+                datam1_r = datam1_r - tempi;
+                datam1_i = datam1_i + tempr;
+
+                tempr = n2w1r + m2ww1r;
+                tempi = n2w1i + m2ww1i;
+
+                datan2_r = datan1_r - tempr;
+                datan2_i = datan1_i - tempi;
+                datan1_r = datan1_r + tempr;
+                datan1_i = datan1_i + tempi;
+
+                data[m] = datam2_r;
+                data[m + 1] = datam2_i;
+                data[n] = datan2_r;
+                data[n + 1] = datan2_i;
+
+                n -= nnstep;
+                m -= nnstep;
+                data[m] = datam1_r;
+                data[m + 1] = datam1_i;
+                data[n] = datan1_r;
+                data[n + 1] = datan1_i;
+
+            }
+
+            i += jmax << 1;
+
+        }
+
+    }
+
+    // Perform Factor-4 Decomposition with 3 * complex operators and 8 +/-
+    // complex operators
+    private final  void calcF4IE(int fftFrameSize, double[] data, int i, //st
+            int nstep, double[] w) {
+        final int fftFrameSize2 = fftFrameSize << 1; // 2*fftFrameSize;
+        // Factor-4 Decomposition
+
+        int w_len = w.length >> 1;
+        while (nstep < fftFrameSize2) {
+
+            int jmax = nstep;
+            int nnstep = nstep << 1;
+            if (nnstep == fftFrameSize2) {
+                // Factor-4 Decomposition not possible
+                calcF2E(fftFrameSize, data, i, nstep, w);
+                return;
+            }
+            nstep <<= 2;
+            int ii = i + jmax;
+            int iii = i + w_len;
+            for (int n = 0; n < jmax; n += 2) {
+                double wr = w[i++];
+                double wi = w[i++];
+                double wr1 = w[ii++];
+                double wi1 = w[ii++];
+                double wwr1 = w[iii++];
+                double wwi1 = w[iii++];
+                // double wwr1 = wr * wr1 - wi * wi1; // these numbers can be
+                // precomputed!!!
+                // double wwi1 = wr * wi1 + wi * wr1;
+
+                int m = n + jmax;
+
+                double datam1_r = data[m];
+                double datam1_i = data[m + 1];
+                double datan1_r = data[n];
+                double datan1_i = data[n + 1];
+
+                n += nnstep;
+                m += nnstep;
+                double datam2_r = data[m];
+                double datam2_i = data[m + 1];
+                double datan2_r = data[n];
+                double datan2_i = data[n + 1];
+
+                double tempr = datam1_r * wr - datam1_i * wi;
+                double tempi = datam1_r * wi + datam1_i * wr;
+
+                datam1_r = datan1_r - tempr;
+                datam1_i = datan1_i - tempi;
+                datan1_r = datan1_r + tempr;
+                datan1_i = datan1_i + tempi;
+
+                double n2w1r = datan2_r * wr1 - datan2_i * wi1;
+                double n2w1i = datan2_r * wi1 + datan2_i * wr1;
+                double m2ww1r = datam2_r * wwr1 - datam2_i * wwi1;
+                double m2ww1i = datam2_r * wwi1 + datam2_i * wwr1;
+
+                tempr = n2w1r - m2ww1r;
+                tempi = n2w1i - m2ww1i;
+
+                datam2_r = datam1_r + tempi;
+                datam2_i = datam1_i - tempr;
+                datam1_r = datam1_r - tempi;
+                datam1_i = datam1_i + tempr;
+
+                tempr = n2w1r + m2ww1r;
+                tempi = n2w1i + m2ww1i;
+
+                datan2_r = datan1_r - tempr;
+                datan2_i = datan1_i - tempi;
+                datan1_r = datan1_r + tempr;
+                datan1_i = datan1_i + tempi;
+
+                data[m] = datam2_r;
+                data[m + 1] = datam2_i;
+                data[n] = datan2_r;
+                data[n + 1] = datan2_i;
+
+                n -= nnstep;
+                m -= nnstep;
+                data[m] = datam1_r;
+                data[m + 1] = datam1_i;
+                data[n] = datan1_r;
+                data[n + 1] = datan1_i;
+
+            }
+
+            i += jmax << 1;
+
+        }
+
+    }
+
+    private final void bitreversal(double[] data) {
+        if (fftFrameSize < 4)
+            return;
+
+        int inverse = fftFrameSize2 - 2;
+        for (int i = 0; i < fftFrameSize; i += 4) {
+            int j = bitm_array[i];
+
+            // Performing Bit-Reversal, even v.s. even, O(2N)
+            if (i < j) {
+
+                int n = i;
+                int m = j;
+
+                // COMPLEX: SWAP(data[n], data[m])
+                // Real Part
+                double tempr = data[n];
+                data[n] = data[m];
+                data[m] = tempr;
+                // Imagery Part
+                n++;
+                m++;
+                double tempi = data[n];
+                data[n] = data[m];
+                data[m] = tempi;
+
+                n = inverse - i;
+                m = inverse - j;
+
+                // COMPLEX: SWAP(data[n], data[m])
+                // Real Part
+                tempr = data[n];
+                data[n] = data[m];
+                data[m] = tempr;
+                // Imagery Part
+                n++;
+                m++;
+                tempi = data[n];
+                data[n] = data[m];
+                data[m] = tempi;
+            }
+
+            // Performing Bit-Reversal, odd v.s. even, O(N)
+
+            int m = j + fftFrameSize; // bitm_array[i+2];
+            // COMPLEX: SWAP(data[n], data[m])
+            // Real Part
+            int n = i + 2;
+            double tempr = data[n];
+            data[n] = data[m];
+            data[m] = tempr;
+            // Imagery Part
+            n++;
+            m++;
+            double tempi = data[n];
+            data[n] = data[m];
+            data[m] = tempi;
+        }
+
+    }
+}
+public class FastFourierTransform {
+
+        /**
+         * Get the frequency intensities
+         *
+         * @param amplitudes    amplitudes of the signal
+         * @return      intensities of each frequency unit: mag[frequency_unit]=intensity
+         */
+        public double[] getMagnitudes(double[] amplitudes) {
+
+                int sampleSize = amplitudes.length;
+               
+                // call the fft and transform the complex numbers
+                resampleFFT fft = new resampleFFT(sampleSize/2,-1);
+                fft.transform(amplitudes);
+                // end call the fft and transform the complex numbers
+               
+                double[] complexNumbers=amplitudes;
+
+                // even indexes (0,2,4,6,...) are real parts
+                // odd indexes (1,3,5,7,...) are img parts
+                int indexSize=sampleSize/2;
+               
+                // FFT produces a transformed pair of arrays where the first half of the values represent positive frequency components and the second half represents negative frequency components.
+                // we omit the negative ones
+                int positiveSize=indexSize/2;
+               
+                double[] mag = new double[positiveSize];
+                for (int i = 0; i < indexSize; i+=2){
+                        mag[i/2] = Math.sqrt(complexNumbers[i] * complexNumbers[i]+ complexNumbers[i+1] * complexNumbers[i+1]);
+                }
+
+                return mag;
+        }
+       
 }
 
 
