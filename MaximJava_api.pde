@@ -580,12 +580,20 @@ public class AudioThread extends Thread
 		// we add up using a 32bit int
 		// to prevent clipping
 		int val = 0;
+                int playerCount=0;
 		if (audioGens.size() > 0) {
 		    for (int j=0;j<audioGens.size(); j++) {
 			AudioGenerator ag = (AudioGenerator)audioGens.get(j);
-			val += ag.getSample();
+                        //System.out.println("isplaying");      
+                        if(ag.isPlaying()){
+			  val += ag.getSample();
+                          playerCount++;
+                        }
 		    }
-		    val /= audioGens.size();
+		    //val /= audioGens.size();
+                    if(playerCount > 0){
+                      val /= playerCount;
+                    }  
 		}
 		bufferS[i] = (short) val;
 	    }
@@ -648,6 +656,7 @@ public class AudioThread extends Thread
 public interface AudioGenerator {
     /** AudioThread calls this when it wants a sample */
     short getSample();
+    boolean isPlaying();
 }
 
 
@@ -695,7 +704,9 @@ public class FXChain  {
     public void volume(float volume) {
     }
 
-
+    public boolean isPlaying(){
+      return true;
+    }  
     public short getSample(short input) {
 	float in;
 	in = (float) input / 32768;// -1 to 1

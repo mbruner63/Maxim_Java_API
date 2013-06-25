@@ -20,3 +20,5 @@ Added new methods for the AudioPlayer class.
 The first method justLoadAudioFile() just loads a file into a short array. I used the previously defined AudioPlayer constructor as a template for this function. This method also insures that the sample rate of the wav file matches the current sampleRate value. If there is a mismatch, the function throws an "InputMismatchException" exception. I don't catch the exception because I feel at this point, the user will not wish to proceed.
 
 I separated the AudioPlayer reset code to a new method resetAudioPlayer().
+
+
